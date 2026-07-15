@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="个人导航" />
+  <meta name="color-scheme" content="light dark" />
+  <title>导航</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <script>
+    /* 防闪烁：尽早应用主题 */
+    (function () {
+      var t = localStorage.getItem('nav-theme');
+      if (t === 'light' || t === 'dark') {
+        document.documentElement.setAttribute('data-theme', t);
+      } else if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+        document.documentElement.setAttribute('data-theme', 'light');
+      } else {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+  </script>
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div class="brand">
+        <h1 id="site-title">导航</h1>
+        <p id="site-subtitle" class="subtitle"></p>
+      </div>
+      <div class="header-actions">
+        <label class="search-wrap">
+          <span class="sr-only">搜索</span>
+          <input id="search" type="search" placeholder="搜索…" autocomplete="off" />
+        </label>
+        <button type="button" id="btn-theme" class="btn icon" title="切换主题" aria-label="切换主题">◐</button>
+        <button type="button" id="btn-admin" class="btn" title="管理">管理</button>
+      </div>
+    </header>
+
+    <nav id="cat-nav" class="cat-nav" aria-label="分类"></nav>
+    <main id="main" class="main"></main>
+
+    <footer class="footer">
+      <span id="storage-hint"></span>
+    </footer>
+  </div>
+
+  <!-- 密码 / 管理面板 -->
+  <dialog id="dlg-auth" class="dlg">
+    <form method="dialog" id="form-auth" class="dlg-body">
+      <h2>管理登录</h2>
+      <p class="hint">输入管理密码以编辑导航</p>
+      <input id="auth-password" type="password" placeholder="密码" required autocomplete="current-password" />
+      <p id="auth-error" class="error" hidden></p>
+      <div class="dlg-actions">
+        <button type="button" class="btn ghost" data-close="dlg-auth">取消</button>
+        <button type="submit" class="btn primary">进入</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dlg-admin" class="dlg wide">
+    <div class="dlg-body">
+      <div class="dlg-head">
+        <h2>编辑导航</h2>
+        <button type="button" class="btn ghost" data-close="dlg-admin">关闭</button>
+      </div>
+
+      <section class="admin-section">
+        <h3>站点信息</h3>
+        <label>标题 <input id="edit-title" type="text" /></label>
+        <label>副标题 <input id="edit-subtitle" type="text" /></label>
+      </section>
+
+      <section class="admin-section">
+        <div class="section-head">
+          <h3>分类与链接</h3>
+          <button type="button" id="btn-add-cat" class="btn">+ 分类</button>
+        </div>
+        <div id="edit-cats" class="edit-cats"></div>
+      </section>
+
+      <div class="dlg-actions sticky">
+        <button type="button" id="btn-logout" class="btn ghost">退出登录</button>
+        <button type="button" id="btn-save" class="btn primary">保存</button>
+      </div>
+      <p id="save-msg" class="hint" hidden></p>
+    </div>
+  </dialog>
+
+  <script src="/js/app.js" type="module"></script>
+</body>
+</html>
