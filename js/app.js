@@ -1,12 +1,20 @@
 /**
- * 极简导航 — 前端逻辑
- * - 优先请求 /api/data（Cloudflare Pages Functions + KV）
- * - 无后端时回退到 localStorage，本地也可完整使用
+ * 极简导航
+ * - 前台：分类锚点 + 外站搜索 + 分区链接（无站名介绍）
+ * - 后台：标题/副标题/分类名/备注仍可编辑并入库
+ * - 数据：/api/* + KV；本地开发可用 localStorage
  */
 
 const STORAGE_KEY = 'nav-site-data';
 const AUTH_KEY = 'nav-site-auth';
 const THEME_KEY = 'nav-theme';
+const ENGINE_KEY = 'nav-search-engine';
+
+const SEARCH_ENGINES = {
+  google: (q) => `https://www.google.com/search?q=${encodeURIComponent(q)}`,
+  baidu: (q) => `https://www.baidu.com/s?wd=${encodeURIComponent(q)}`,
+  ddg: (q) => `https://duckduckgo.com/?q=${encodeURIComponent(q)}`,
+};
 
 const DEFAULT_DATA = {
   title: '导航',
@@ -63,155 +71,9 @@ function normalizeUrl(url) {
   return `https://${t}`;
 }
 
-function hostOf(url) {
-  try {
-    return new URL(normalizeUrl(url)).hostname.replace(/^www\./, '');
-  } catch {
-    return url || '';
-  }
-}
-
-/* ---------- Theme ---------- */
-function setTheme(theme) {
-  document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem(THEME_KEY, theme);
-}
-
-function toggleTheme() {
-  const cur = document.documentElement.getAttribute('data-theme') || 'dark';
-  setTheme(cur === 'dark' ? 'light' : 'dark');
-}
-
-/* ---------- Data ---------- */
-async function loadData() {
-  try {
-    const res = await fetch('/api/data', { headers: { Accept: 'application/json' } });
-    if (res.ok) {
-      const json = await res.json();
-      useRemote = true;
-      state = sanitizeData(json);
-      $('#storage-hint').textContent = '数据：云端存储';
-      return;
-    }
-  } catch {
-    /* offline / pure static */
-  }
-
-  useRemote = false;
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw) {
-    try {
-      state = sanitizeData(JSON.parse(raw));
-    } catch {
-      state = structuredClone(DEFAULT_DATA);
-    }
-  } else {
-    state = structuredClone(DEFAULT_DATA);
-  }
-  $('#storage-hint').textContent = '数据：本机 localStorage（未连接云端 API）';
-}
-
-function sanitizeData(data) {
-  const base = structuredClone(DEFAULT_DATA);
-  if (!data || typeof data !== 'object') return base;
-  return {
-    title: String(data.title || base.title),
-    subtitle: String(data.subtitle ?? base.subtitle),
-    categories: Array.isArray(data.categories)
-      ? data.categories.map((c) => ({
-          id: String(c.id || uid('cat')),
-          name: String(c.name || '未命名'),
-          links: Array.isArray(c.links)
-            ? c.links.map((l) => ({
-                id: String(l.id || uid('link')),
-                name: String(l.name || '未命名'),
-                url: String(l.url || ''),
-                desc: String(l.desc || ''),
-              }))
-            : [],
-        }))
-      : base.categories,
-  };
-}
-
-async function saveData(data, password) {
-  if (useRemote) {
-    const res = await fetch('/api/save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password, data }),
-    });
-    if (res.status === 401) {
-      throw new Error('密码错误');
-    }
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || `保存失败 (${res.status})`);
-    }
-    return;
-  }
-
-  // 本地模式：密码固定为 admin（可在 README 说明；纯静态无服务端密钥）
-  const localPass = localStorage.getItem('nav-site-local-pass') || 'admin';
-  if (password !== localPass) {
-    throw new Error('密码错误（本地默认 admin）');
-  }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
-
-/* ---------- Render ---------- */
-function render() {
-  document.title = state.title || '导航';
-  $('#site-title').textContent = state.title || '导航';
-  const sub = $('#site-subtitle');
-  sub.textContent = state.subtitle || '';
-  sub.hidden = !state.subtitle;
-
-  const q = ($('#search').value || '').trim().toLowerCase();
-  const cats = state.categories
-    .map((cat) => {
-      const links = cat.links.filter((l) => {
-        if (!q) return true;
-        const hay = `${l.name} ${l.desc} ${l.url} ${cat.name}`.toLowerCase();
-        return hay.includes(q);
-      });
-      return { ...cat, links };
-    })
-    .filter((c) => c.links.length > 0 || !q);
-
-  const nav = $('#cat-nav');
-  nav.innerHTML = cats
-    .map((c) => `<a href="#cat-${c.id}">${escapeHtml(c.name)}</a>`)
-    .join('');
-  nav.hidden = cats.length === 0;
-
-  const main = $('#main');
-  if (!cats.length) {
-    main.innerHTML = `<p class="empty">${q ? '没有匹配的链接' : '暂无内容，点击「管理」添加'}</p>`;
-    return;
-  }
-
-  main.innerHTML = cats
-    .map(
-      (cat) => `
-      <section class="cat" id="cat-${escapeAttr(cat.id)}">
-        <h2>${escapeHtml(cat.name)}</h2>
-        <div class="links">
-          ${cat.links
-            .map((l) => {
-              const href = normalizeUrl(l.url);
-              const desc = l.desc || hostOf(l.url);
-              return `
-                <a class="link-card" href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer">
-                  <span class="name">${escapeHtml(l.name)}</span>
-                  <span class="desc">${escapeHtml(desc)}</span>
-                </a>`;
-            })
-            .join('')}
-        </div>
-      </section>`
-    )
-    .join('');
+function isLocalHost() {
+  const h = location.hostname;
+  return h === 'localhost' || h === '127.0.0.1' || h === '[::1]';
 }
 
 function escapeHtml(s) {
@@ -226,10 +88,197 @@ function escapeAttr(s) {
   return escapeHtml(s).replaceAll("'", '&#39;');
 }
 
-/* ---------- Admin UI ---------- */
+/* ---------- Theme ---------- */
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem(THEME_KEY, theme);
+}
+
+function toggleTheme() {
+  const cur = document.documentElement.getAttribute('data-theme') || 'dark';
+  setTheme(cur === 'dark' ? 'light' : 'dark');
+}
+
+/* ---------- Data ---------- */
+function sanitizeData(data) {
+  if (!data || typeof data !== 'object') return structuredClone(DEFAULT_DATA);
+  return {
+    title: String(data.title || DEFAULT_DATA.title),
+    subtitle: String(data.subtitle ?? DEFAULT_DATA.subtitle),
+    categories: Array.isArray(data.categories)
+      ? data.categories.map((c) => ({
+          id: String(c.id || uid('cat')),
+          name: String(c.name || '未命名'),
+          links: Array.isArray(c.links)
+            ? c.links.map((l) => ({
+                id: String(l.id || uid('link')),
+                name: String(l.name || '未命名'),
+                url: String(l.url || ''),
+                desc: String(l.desc || ''),
+              }))
+            : [],
+        }))
+      : structuredClone(DEFAULT_DATA.categories),
+  };
+}
+
+function setStorageHint(text) {
+  const el = $('#storage-hint');
+  if (el) el.textContent = text;
+}
+
+async function loadData() {
+  try {
+    const res = await fetch('/api/data', { headers: { Accept: 'application/json' } });
+    if (res.ok) {
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        const json = await res.json();
+        if (json && !json.error) {
+          useRemote = true;
+          state = sanitizeData(json);
+          setStorageHint('云端存储');
+          return;
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  useRemote = false;
+
+  if (isLocalHost()) {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      state = raw ? sanitizeData(JSON.parse(raw)) : structuredClone(DEFAULT_DATA);
+    } catch {
+      state = structuredClone(DEFAULT_DATA);
+    }
+    setStorageHint('本机开发 localStorage');
+    return;
+  }
+
+  // 线上无 API：只展示默认/草稿，不冒充全站
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    state = raw ? sanitizeData(JSON.parse(raw)) : structuredClone(DEFAULT_DATA);
+  } catch {
+    state = structuredClone(DEFAULT_DATA);
+  }
+  setStorageHint('未连接云端 API');
+}
+
+async function saveData(data, password) {
+  if (useRemote) {
+    const res = await fetch('/api/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, data }),
+    });
+    if (res.status === 401) throw new Error('密码错误');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `保存失败 (${res.status})`);
+    }
+    return;
+  }
+
+  if (!isLocalHost()) {
+    throw new Error('全站保存需要云端 API + KV');
+  }
+
+  const localPass = localStorage.getItem('nav-site-local-pass') || 'admin';
+  if (password !== localPass) throw new Error('密码错误（本地默认 admin）');
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+/* ---------- Render（前台极简） ---------- */
+function render() {
+  // 标题/副标题仅用于浏览器标签，页面上不展示
+  document.title = state.title || '导航';
+
+  const cats = state.categories.filter((c) => c.links && c.links.length);
+
+  const nav = $('#cat-nav');
+  if (nav) {
+    nav.innerHTML = cats
+      .map((c) => `<a href="#cat-${escapeAttr(c.id)}">${escapeHtml(c.name)}</a>`)
+      .join('');
+    nav.hidden = cats.length === 0;
+  }
+
+  const main = $('#main');
+  if (!main) return;
+
+  if (!cats.length) {
+    main.innerHTML = '<p class="empty">暂无内容，点击「管理」添加</p>';
+    return;
+  }
+
+  // 分区保留；不渲染分类名、不渲染备注/介绍
+  main.innerHTML = cats
+    .map(
+      (cat) => `
+      <section class="cat" id="cat-${escapeAttr(cat.id)}" aria-label="${escapeAttr(cat.name)}">
+        <div class="links">
+          ${cat.links
+            .map((l) => {
+              const href = normalizeUrl(l.url);
+              return `<a class="link-card" href="${escapeAttr(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(l.name)}</a>`;
+            })
+            .join('')}
+        </div>
+      </section>`
+    )
+    .join('');
+}
+
+/* ---------- Web search ---------- */
+function initWebSearch() {
+  const form = $('#web-search');
+  if (!form) return;
+
+  const saved = localStorage.getItem(ENGINE_KEY);
+  if (saved && SEARCH_ENGINES[saved]) {
+    const radio = form.querySelector(`input[name="engine"][value="${saved}"]`);
+    if (radio) radio.checked = true;
+  }
+
+  form.addEventListener('change', (e) => {
+    const t = e.target;
+    if (t && t.name === 'engine' && SEARCH_ENGINES[t.value]) {
+      localStorage.setItem(ENGINE_KEY, t.value);
+    }
+  });
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const q = ($('#q')?.value || '').trim();
+    if (!q) {
+      $('#q')?.focus();
+      return;
+    }
+    const engine = form.querySelector('input[name="engine"]:checked')?.value || 'google';
+    const build = SEARCH_ENGINES[engine] || SEARCH_ENGINES.google;
+    window.open(build(q), '_blank', 'noopener,noreferrer');
+  });
+}
+
+/* ---------- Admin ---------- */
 function openAuth() {
   $('#auth-error').hidden = true;
   $('#auth-password').value = '';
+  const hint = $('#dlg-auth .hint');
+  if (hint) {
+    if (useRemote) {
+      hint.textContent = '输入 Cloudflare 中的 ADMIN_PASSWORD';
+    } else if (isLocalHost()) {
+      hint.textContent = '本地开发默认密码 admin';
+    } else {
+      hint.textContent = '云端 API 未就绪时无法写入全站，仅本机草稿';
+    }
+  }
   $('#dlg-auth').showModal();
   requestAnimationFrame(() => $('#auth-password').focus());
 }
@@ -239,7 +288,8 @@ function openAdmin() {
   $('#edit-title').value = editDraft.title || '';
   $('#edit-subtitle').value = editDraft.subtitle || '';
   renderEditCats();
-  $('#save-msg').hidden = true;
+  const msg = $('#save-msg');
+  if (msg) msg.hidden = true;
   $('#dlg-admin').showModal();
 }
 
@@ -252,16 +302,14 @@ function renderEditCats() {
     box.className = 'edit-cat';
     box.innerHTML = `
       <div class="edit-cat-head">
-        <input type="text" data-cat-name value="${escapeAttr(cat.name)}" placeholder="分类名" />
+        <input type="text" data-cat-name value="${escapeAttr(cat.name)}" placeholder="分类名（前台锚点用）" />
         <button type="button" class="btn sm" data-add-link>＋链接</button>
         <button type="button" class="btn sm danger" data-del-cat>删除分类</button>
       </div>
       <div class="edit-links"></div>`;
 
     const linksEl = $('.edit-links', box);
-    cat.links.forEach((link, li) => {
-      linksEl.appendChild(makeLinkRow(ci, li, link));
-    });
+    cat.links.forEach((link, li) => linksEl.appendChild(makeLinkRow(ci, li, link)));
 
     $('[data-cat-name]', box).addEventListener('input', (e) => {
       editDraft.categories[ci].name = e.target.value;
@@ -292,13 +340,12 @@ function makeLinkRow(ci, li, link) {
     <input type="text" data-f="name" value="${escapeAttr(link.name)}" placeholder="名称" />
     <input type="url" data-f="url" value="${escapeAttr(link.url)}" placeholder="https://..." />
     <button type="button" class="btn sm danger" data-del-link>删</button>
-    <input type="text" data-f="desc" value="${escapeAttr(link.desc || '')}" placeholder="备注（可选）" style="grid-column: 1 / -2" />
+    <input type="text" data-f="desc" value="${escapeAttr(link.desc || '')}" placeholder="备注（前台不显示）" style="grid-column: 1 / -2" />
   `;
 
   $$('input[data-f]', row).forEach((input) => {
     input.addEventListener('input', () => {
-      const f = input.getAttribute('data-f');
-      editDraft.categories[ci].links[li][f] = input.value;
+      editDraft.categories[ci].links[li][input.getAttribute('data-f')] = input.value;
     });
   });
   $('[data-del-link]', row).addEventListener('click', () => {
@@ -326,13 +373,17 @@ async function handleAuthSubmit(e) {
         err.hidden = false;
         return;
       }
-    } else {
+    } else if (isLocalHost()) {
       const localPass = localStorage.getItem('nav-site-local-pass') || 'admin';
       if (password !== localPass) {
         err.textContent = '密码错误（本地默认 admin）';
         err.hidden = false;
         return;
       }
+    } else if (!password) {
+      err.textContent = '请输入密码';
+      err.hidden = false;
+      return;
     }
 
     adminPassword = password;
@@ -341,7 +392,7 @@ async function handleAuthSubmit(e) {
     $('#dlg-auth').close();
     openAdmin();
   } catch {
-    err.textContent = '验证失败，请稍后重试';
+    err.textContent = '验证失败';
     err.hidden = false;
   }
 }
@@ -367,7 +418,6 @@ async function handleSave() {
     }))
     .filter((c) => c.name);
 
-  // 未登录会话里没有密码时，要求重新输入
   if (!adminPassword) {
     $('#dlg-admin').close();
     openAuth();
@@ -402,35 +452,27 @@ function logout() {
 
 /* ---------- Bind ---------- */
 function bind() {
-  $('#btn-theme').addEventListener('click', toggleTheme);
-  $('#search').addEventListener('input', render);
+  $('#btn-theme')?.addEventListener('click', toggleTheme);
+  initWebSearch();
 
-  $('#btn-admin').addEventListener('click', () => {
+  $('#btn-admin')?.addEventListener('click', () => {
     if (isAuthed && adminPassword) openAdmin();
     else openAuth();
   });
 
-  $('#form-auth').addEventListener('submit', handleAuthSubmit);
-  $('#btn-save').addEventListener('click', handleSave);
-  $('#btn-logout').addEventListener('click', logout);
-  $('#btn-add-cat').addEventListener('click', () => {
-    editDraft.categories.push({
-      id: uid('cat'),
-      name: '新分类',
-      links: [],
-    });
+  $('#form-auth')?.addEventListener('submit', handleAuthSubmit);
+  $('#btn-save')?.addEventListener('click', handleSave);
+  $('#btn-logout')?.addEventListener('click', logout);
+  $('#btn-add-cat')?.addEventListener('click', () => {
+    editDraft.categories.push({ id: uid('cat'), name: '新分类', links: [] });
     renderEditCats();
   });
 
   $$('[data-close]').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const id = btn.getAttribute('data-close');
-      document.getElementById(id)?.close();
-    });
+    btn.addEventListener('click', () => document.getElementById(btn.getAttribute('data-close'))?.close());
   });
 }
 
-/* ---------- Init ---------- */
 bind();
 await loadData();
 render();
