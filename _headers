@@ -4,11 +4,9 @@
   X-Frame-Options: DENY
   Permissions-Policy: camera=(), microphone=(), geolocation=()
 
+# 静态资源可多缓存一会儿；改版后强制刷新或等过期
 /css/*
-  Cache-Control: public, max-age=300, must-revalidate
+  Cache-Control: public, max-age=86400, must-revalidate
 
 /js/*
-  Cache-Control: public, max-age=300, must-revalidate
-
-/api/*
-  Cache-Control: no-store
+  Cache-Control: public, max-age=86400, must-revalidate

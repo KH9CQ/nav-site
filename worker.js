@@ -1,6 +1,8 @@
 /**
- * Cloudflare Worker 入口：/api/* 走服务端，其余走静态资源
- * 绑定：NAV_KV（KV）、ADMIN_PASSWORD（Secret）
+ * Cloudflare Worker：
+ * - /api/* 读写 KV
+ * - / 与 /index.html 注入导航数据，减少浏览器二次请求
+ * 绑定：NAV_KV、ADMIN_PASSWORD、ASSETS
  */
 
 const KEY = 'nav:data';
@@ -40,12 +42,12 @@ const DEFAULT_DATA = {
   ],
 };
 
-function json(data, status = 200) {
+function json(data, status = 200, cacheControl = 'no-store') {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
-      'Cache-Control': 'no-store',
+      'Cache-Control': cacheControl,
     },
   });
 }
@@ -69,12 +71,23 @@ function isValidData(data) {
   return true;
 }
 
-async function handleDataGet(env) {
-  if (!env.NAV_KV) return json(DEFAULT_DATA);
+/** 读导航 JSON（公开） */
+async function getNavData(env) {
+  if (!env.NAV_KV) return DEFAULT_DATA;
   try {
     const raw = await env.NAV_KV.get(KEY);
-    if (!raw) return json(DEFAULT_DATA);
-    return json(JSON.parse(raw));
+    if (!raw) return DEFAULT_DATA;
+    return JSON.parse(raw);
+  } catch {
+    return DEFAULT_DATA;
+  }
+}
+
+async function handleDataGet(env) {
+  try {
+    const data = await getNavData(env);
+    // 公开读：边缘可短缓存，管理保存后最多约 1 分钟内边缘可能略旧
+    return json(data, 200, 'public, max-age=30, s-maxage=60, stale-while-revalidate=120');
   } catch {
     return json({ error: '读取失败' }, 500);
   }
@@ -140,6 +153,33 @@ async function handleSave(request, env) {
   }
 }
 
+/** 首页注入数据：浏览器少一次 /api/data 往返 */
+async function serveIndex(request, env) {
+  if (!env.ASSETS) return new Response('ASSETS binding missing', { status: 500 });
+
+  const assetReq = new Request(new URL('/index.html', request.url), request);
+  const assetRes = await env.ASSETS.fetch(assetReq);
+  if (!assetRes.ok) return assetRes;
+
+  const [html, data] = await Promise.all([assetRes.text(), getNavData(env)]);
+
+  // 防止 </script> 截断
+  const safe = JSON.stringify(data).replace(/</g, '\\u003c');
+  const boot = `<script>window.__NAV_BOOT__=${safe}</script>`;
+  const out = html.includes('</head>')
+    ? html.replace('</head>', `${boot}\n</head>`)
+    : boot + html;
+
+  return new Response(out, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=0, must-revalidate',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -158,7 +198,11 @@ export default {
       return json({ error: 'Not found' }, 404);
     }
 
-    // 静态资源（index.html / css / js）
+    // 首页走注入；其它静态资源直出 ASSETS（由 wrangler run_worker_first 控制）
+    if (request.method === 'GET' && (path === '/' || path === '/index.html')) {
+      return serveIndex(request, env);
+    }
+
     if (env.ASSETS) {
       return env.ASSETS.fetch(request);
     }
