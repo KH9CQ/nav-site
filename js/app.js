@@ -293,15 +293,29 @@ function openAdmin() {
   $('#dlg-admin').showModal();
 }
 
+/** 数组内相邻交换，用于分类/链接排序 */
+function swapItems(arr, i, j) {
+  if (i < 0 || j < 0 || i >= arr.length || j >= arr.length || i === j) return false;
+  const t = arr[i];
+  arr[i] = arr[j];
+  arr[j] = t;
+  return true;
+}
+
 function renderEditCats() {
   const root = $('#edit-cats');
   root.innerHTML = '';
+  const catCount = editDraft.categories.length;
 
   editDraft.categories.forEach((cat, ci) => {
     const box = document.createElement('div');
     box.className = 'edit-cat';
     box.innerHTML = `
       <div class="edit-cat-head">
+        <div class="sort-btns" title="分类顺序">
+          <button type="button" class="btn sm sort" data-cat-up ${ci === 0 ? 'disabled' : ''}>↑</button>
+          <button type="button" class="btn sm sort" data-cat-down ${ci >= catCount - 1 ? 'disabled' : ''}>↓</button>
+        </div>
         <input type="text" data-cat-name value="${escapeAttr(cat.name)}" placeholder="分类名（前台锚点用）" />
         <button type="button" class="btn sm" data-add-link>＋链接</button>
         <button type="button" class="btn sm danger" data-del-cat>删除分类</button>
@@ -309,7 +323,8 @@ function renderEditCats() {
       <div class="edit-links"></div>`;
 
     const linksEl = $('.edit-links', box);
-    cat.links.forEach((link, li) => linksEl.appendChild(makeLinkRow(ci, li, link)));
+    const linkCount = cat.links.length;
+    cat.links.forEach((link, li) => linksEl.appendChild(makeLinkRow(ci, li, link, linkCount)));
 
     $('[data-cat-name]', box).addEventListener('input', (e) => {
       editDraft.categories[ci].name = e.target.value;
@@ -328,19 +343,29 @@ function renderEditCats() {
       editDraft.categories.splice(ci, 1);
       renderEditCats();
     });
+    $('[data-cat-up]', box)?.addEventListener('click', () => {
+      if (swapItems(editDraft.categories, ci, ci - 1)) renderEditCats();
+    });
+    $('[data-cat-down]', box)?.addEventListener('click', () => {
+      if (swapItems(editDraft.categories, ci, ci + 1)) renderEditCats();
+    });
 
     root.appendChild(box);
   });
 }
 
-function makeLinkRow(ci, li, link) {
+function makeLinkRow(ci, li, link, linkCount) {
   const row = document.createElement('div');
   row.className = 'edit-link';
   row.innerHTML = `
+    <div class="sort-btns" title="链接顺序">
+      <button type="button" class="btn sm sort" data-link-up ${li === 0 ? 'disabled' : ''}>↑</button>
+      <button type="button" class="btn sm sort" data-link-down ${li >= linkCount - 1 ? 'disabled' : ''}>↓</button>
+    </div>
     <input type="text" data-f="name" value="${escapeAttr(link.name)}" placeholder="名称" />
     <input type="url" data-f="url" value="${escapeAttr(link.url)}" placeholder="https://..." />
     <button type="button" class="btn sm danger" data-del-link>删</button>
-    <input type="text" data-f="desc" value="${escapeAttr(link.desc || '')}" placeholder="备注（前台不显示）" style="grid-column: 1 / -2" />
+    <input type="text" data-f="desc" value="${escapeAttr(link.desc || '')}" placeholder="备注（前台不显示）" class="edit-desc" />
   `;
 
   $$('input[data-f]', row).forEach((input) => {
@@ -351,6 +376,12 @@ function makeLinkRow(ci, li, link) {
   $('[data-del-link]', row).addEventListener('click', () => {
     editDraft.categories[ci].links.splice(li, 1);
     renderEditCats();
+  });
+  $('[data-link-up]', row)?.addEventListener('click', () => {
+    if (swapItems(editDraft.categories[ci].links, li, li - 1)) renderEditCats();
+  });
+  $('[data-link-down]', row)?.addEventListener('click', () => {
+    if (swapItems(editDraft.categories[ci].links, li, li + 1)) renderEditCats();
   });
   return row;
 }
