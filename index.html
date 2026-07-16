@@ -8,7 +8,6 @@
   <title>导航</title>
   <link rel="stylesheet" href="/css/style.css" />
   <script>
-    /* 防闪烁：尽早应用主题 */
     (function () {
       var t = localStorage.getItem('nav-theme');
       if (t === 'light' || t === 'dark') {
@@ -24,21 +23,35 @@
 <body>
   <div class="page">
     <header class="header">
-      <div class="brand">
-        <h1 id="site-title">导航</h1>
-        <p id="site-subtitle" class="subtitle"></p>
-      </div>
+      <!-- 分类锚点：占原标题位置，宽度约一半 -->
+      <nav id="cat-nav" class="cat-nav" aria-label="分类"></nav>
+
       <div class="header-actions">
-        <label class="search-wrap">
-          <span class="sr-only">搜索</span>
-          <input id="search" type="search" placeholder="搜索…" autocomplete="off" />
-        </label>
+        <form id="web-search" class="web-search" action="#" method="get" role="search">
+          <div class="engine-tabs" role="radiogroup" aria-label="搜索引擎">
+            <label class="engine">
+              <input type="radio" name="engine" value="google" checked />
+              <span>Google</span>
+            </label>
+            <label class="engine">
+              <input type="radio" name="engine" value="baidu" />
+              <span>百度</span>
+            </label>
+            <label class="engine">
+              <input type="radio" name="engine" value="ddg" />
+              <span>DDG</span>
+            </label>
+          </div>
+          <div class="web-search-row">
+            <input id="q" type="search" name="q" placeholder="搜索网页…" autocomplete="off" enterkeyhint="search" />
+            <button type="submit" class="btn primary sm">搜索</button>
+          </div>
+        </form>
         <button type="button" id="btn-theme" class="btn icon" title="切换主题" aria-label="切换主题">◐</button>
         <button type="button" id="btn-admin" class="btn" title="管理">管理</button>
       </div>
     </header>
 
-    <nav id="cat-nav" class="cat-nav" aria-label="分类"></nav>
     <main id="main" class="main"></main>
 
     <footer class="footer">
@@ -46,7 +59,6 @@
     </footer>
   </div>
 
-  <!-- 密码 / 管理面板 -->
   <dialog id="dlg-auth" class="dlg">
     <form method="dialog" id="form-auth" class="dlg-body">
       <h2>管理登录</h2>
@@ -68,14 +80,14 @@
       </div>
 
       <section class="admin-section">
-        <h3>站点信息</h3>
+        <h3>站点信息 <span class="admin-note">（仅后台 / 浏览器标签，前台不显示）</span></h3>
         <label>标题 <input id="edit-title" type="text" /></label>
         <label>副标题 <input id="edit-subtitle" type="text" /></label>
       </section>
 
       <section class="admin-section">
         <div class="section-head">
-          <h3>分类与链接</h3>
+          <h3>分类与链接 <span class="admin-note">（分类名、备注仅后台与锚点用，前台不展示）</span></h3>
           <button type="button" id="btn-add-cat" class="btn">+ 分类</button>
         </div>
         <div id="edit-cats" class="edit-cats"></div>
