@@ -28,27 +28,33 @@
 
       <div class="header-actions">
         <form id="web-search" class="web-search" action="#" method="get" role="search">
-          <div class="engine-tabs" role="radiogroup" aria-label="搜索引擎">
-            <label class="engine">
-              <input type="radio" name="engine" value="google" checked />
-              <span>Google</span>
-            </label>
-            <label class="engine">
-              <input type="radio" name="engine" value="baidu" />
-              <span>百度</span>
-            </label>
-            <label class="engine">
-              <input type="radio" name="engine" value="ddg" />
-              <span>DDG</span>
-            </label>
-          </div>
-          <div class="web-search-row">
-            <input id="q" type="search" name="q" placeholder="搜索网页…" autocomplete="off" enterkeyhint="search" />
-            <button type="submit" class="btn primary sm">搜索</button>
+          <div class="search-shell">
+            <div class="engine-seg" role="radiogroup" aria-label="搜索引擎">
+              <label class="engine">
+                <input type="radio" name="engine" value="google" checked />
+                <span>Google</span>
+              </label>
+              <label class="engine">
+                <input type="radio" name="engine" value="baidu" />
+                <span>百度</span>
+              </label>
+              <label class="engine">
+                <input type="radio" name="engine" value="ddg" />
+                <span>DDG</span>
+              </label>
+            </div>
+            <span class="search-divider" aria-hidden="true"></span>
+            <input id="q" type="search" name="q" placeholder="搜索…" autocomplete="off" enterkeyhint="search" />
+            <button type="submit" class="search-go" title="搜索" aria-label="搜索">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="7"/>
+                <path d="M20 20l-3.5-3.5"/>
+              </svg>
+            </button>
           </div>
         </form>
         <button type="button" id="btn-theme" class="btn icon" title="切换主题" aria-label="切换主题">◐</button>
-        <button type="button" id="btn-admin" class="btn" title="管理">管理</button>
+        <button type="button" id="btn-admin" class="btn btn-quiet" title="管理">管理</button>
       </div>
     </header>
 

@@ -1,16 +1,29 @@
-# Cloudflare 通过 Git 部署 Workers 时读取此文件
-# 直接「上传静态文件」请不要上传本文件（或整包用 Git 连接）
+# Cloudflare Git 部署的「真源配置」
+# 每次 push 都会按本文件重建绑定。
+# 只在控制台点的 KV / 纯文本变量，下次部署可能被冲掉 —— 所以 KV 必须写在这里。
 
 name = "nav-site"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
-# 静态页面与 Worker 同项目；/api/* 先走 worker.js
 [assets]
 directory = "."
 binding = "ASSETS"
 run_worker_first = ["/api/*"]
 
-# 在 Dashboard 绑定同名资源（也可在此填 id 后用 CLI，网页部署可不填 id）：
-# KV: NAV_KV
-# Secret: ADMIN_PASSWORD
+# ---------- KV（一次性填 ID，以后更新代码不用再配）----------
+# 1. Dashboard → Workers & Pages → KV → 点开你的命名空间
+# 2. 复制 Namespace ID（一长串，不是显示名）
+# 3. 把下面 id 换成你的，提交到 GitHub
+# 4. 以后只改 html/css/js 即可，KV 绑定会随部署自动挂上
+[[kv_namespaces]]
+binding = "NAV_KV"
+id = "e1842d4b409b4e3a8a17e80b055ce864"
+
+# ---------- 管理密码（不要写进本文件！不要提交到 Git！）----------
+# 在 Dashboard → nav-site → 变量和机密 → 添加：
+#   类型务必选「密钥 / Secret」（不要选「文本 / Text」）
+#   名称：ADMIN_PASSWORD
+#   值：你的强密码
+# 选 Secret 后，Git 部署一般会保留，不会像「文本」变量那样被冲掉。
+# 若曾用「文本」配过密码，请删掉后改建成 Secret，只做一次。
