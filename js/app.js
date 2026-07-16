@@ -127,20 +127,46 @@ function setStorageHint(text) {
   if (el) el.textContent = text;
 }
 
-async function loadData() {
+/** Worker 注入的首屏数据（与 HTML 同响应，无额外 RTT） */
+function takeBootstrap() {
+  if (typeof window.__NAV_BOOT__ === 'undefined' || !window.__NAV_BOOT__) return null;
+  const data = window.__NAV_BOOT__;
   try {
-    const res = await fetch('/api/data', { headers: { Accept: 'application/json' } });
-    if (res.ok) {
-      const ct = res.headers.get('content-type') || '';
-      if (ct.includes('application/json')) {
-        const json = await res.json();
-        if (json && !json.error) {
-          useRemote = true;
-          state = sanitizeData(json);
-          setStorageHint('云端存储');
-          return;
-        }
-      }
+    delete window.__NAV_BOOT__;
+  } catch {
+    window.__NAV_BOOT__ = undefined;
+  }
+  return data;
+}
+
+async function fetchRemoteData() {
+  const res = await fetch('/api/data', { headers: { Accept: 'application/json' } });
+  if (!res.ok) return null;
+  const ct = res.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) return null;
+  const json = await res.json();
+  if (!json || json.error) return null;
+  return json;
+}
+
+async function loadData() {
+  // 1) 服务端注入：最快路径
+  const boot = takeBootstrap();
+  if (boot) {
+    useRemote = true;
+    state = sanitizeData(boot);
+    setStorageHint('云端存储');
+    return;
+  }
+
+  // 2) 请求 API（无注入时 / 本地调试）
+  try {
+    const json = await fetchRemoteData();
+    if (json) {
+      useRemote = true;
+      state = sanitizeData(json);
+      setStorageHint('云端存储');
+      return;
     }
   } catch {
     /* ignore */
@@ -159,7 +185,6 @@ async function loadData() {
     return;
   }
 
-  // 线上无 API：只展示默认/草稿，不冒充全站
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     state = raw ? sanitizeData(JSON.parse(raw)) : structuredClone(DEFAULT_DATA);
