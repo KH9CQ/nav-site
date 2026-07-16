@@ -153,13 +153,40 @@ async function handleSave(request, env) {
   }
 }
 
+/**
+ * 从 ASSETS 取首页 HTML（不要把 307 回给浏览器，否则 / ↔ /index.html 死循环）
+ * env.ASSETS 走静态资源层，不会再次进入本 Worker。
+ */
+async function fetchIndexHtml(env, request) {
+  const origin = new URL(request.url).origin;
+  // 优先直接要文件体；若平台对 /index.html 做规范化重定向，只在 ASSETS 内跟随
+  const candidates = ['/index.html', '/'];
+  for (const path of candidates) {
+    let res = await env.ASSETS.fetch(new URL(path, origin));
+    let guard = 0;
+    while (res.status >= 300 && res.status < 400 && guard++ < 4) {
+      const loc = res.headers.get('Location');
+      if (!loc) break;
+      res = await env.ASSETS.fetch(new URL(loc, origin));
+    }
+    if (res.ok) {
+      const ctype = res.headers.get('Content-Type') || '';
+      if (ctype.includes('text/html') || path.endsWith('.html') || path === '/') {
+        return res;
+      }
+    }
+  }
+  return null;
+}
+
 /** 首页注入数据：浏览器少一次 /api/data 往返 */
 async function serveIndex(request, env) {
   if (!env.ASSETS) return new Response('ASSETS binding missing', { status: 500 });
 
-  const assetReq = new Request(new URL('/index.html', request.url), request);
-  const assetRes = await env.ASSETS.fetch(assetReq);
-  if (!assetRes.ok) return assetRes;
+  const assetRes = await fetchIndexHtml(env, request);
+  if (!assetRes) {
+    return new Response('index.html not found in assets', { status: 500 });
+  }
 
   const [html, data] = await Promise.all([assetRes.text(), getNavData(env)]);
 
